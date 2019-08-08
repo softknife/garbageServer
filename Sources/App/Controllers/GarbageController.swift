@@ -5,7 +5,7 @@
 //  Created by Reed on 2019/8/7.
 //
 import Vapor
-
+import HTTP
 
 typealias StringDict = [String:String]
 final class GarbageController:RouteCollection{
@@ -105,13 +105,24 @@ extension GarbageController{
          */
 
         let name = try req.query.get(String.self, at: "name")
-
-
-       return  try req.client().get("https://laji.lr3800.com/api.php?name=\(name)", headers: ["Content-Type":"application/json;charset=UTF-8"], beforeSend: { (req) in
-            
-        }).map({ (response) -> (Response) in
-            return response
-        })
-
+        
+        var httpReq = HTTPRequest(method: .GET, url: "/api.php?name=\(name)")
+        httpReq.headers  = ["Content-Type":"application/json;charset=UTF-8;text/html",
+                            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36",
+                            "Cookie": "__cfduid=d8965f82364956ea3ab8feea035d0f9761565254256"]
+        
+        let client = HTTPClient.connect(scheme:.https,hostname: "laji.lr3800.com", on: req)
+        let httpRes = client.flatMap(to: HTTPResponse.self) { client in
+            return client.send(httpReq)
+        }
+        
+        return httpRes.flatMap{ (httpRes) -> EventLoopFuture<Response> in
+            return try Response(http: httpRes, using: req).encode(for: req)
+        }
+//        let data = httpRes.flatMap(to: [String:Any].self) { httpResponse in
+//            let response = Response(http: httpResponse, using: req)
+//            return response
+////            return try response.content.decode([String:Any].self)
+//        }
     }
 }
