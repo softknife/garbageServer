@@ -6,6 +6,7 @@
 //
 import Vapor
 import HTTP
+import Fluent
 
 typealias StringDict = [String:String]
 final class GarbageController:RouteCollection{
@@ -17,6 +18,7 @@ final class GarbageController:RouteCollection{
         
         group.get("category", use: getCategoryInfo)
         group.get("info", use: findGarbage)
+        group.get("translate", use: translate)
     }
 }
 
@@ -84,6 +86,48 @@ extension GarbageController{
     }
 }
 
+//import FluentSQLite
+//
+//
+//struct Detail  : Codable,Content {
+//    var name: String?
+//    var type: Int = 0
+//    var aipre: Int = 0
+//    var explain: String?
+//    var contain: String?
+//    var tip: String?
+//
+////    static var defaultContentType: MediaType {
+////        return .html
+////    }
+//
+//}
+//
+//struct GarbageResult:Codable,Content{
+//    var code:Int = 0
+//    var msg:String = ""
+//    var newList:[Detail]? = nil
+//
+////    static var defaultContentType: MediaType {
+////        return .html
+////    }
+////    enum CodingKeys:String,CodingKey  {
+////        case code = "code"
+////        case msg = "msg"
+////        case newList = "newList"
+////    }
+////
+//
+////    init(from decoder: Decoder) throws {
+////        let vals = try decoder.container(keyedBy: CodingKeys.self)
+////        code = try vals.decode(Int.self, forKey: CodingKeys.code)
+////        msg = try vals.decode(String.self, forKey: CodingKeys.msg)
+////
+////
+////
+////    }
+//}
+
 
 extension GarbageController{
     
@@ -91,38 +135,88 @@ extension GarbageController{
 
         /*
 
-
          https://laji.lr3800.com/api.php?name=
          调用方式：HTTP post get
          name = 关键字
          例子： https://laji.lr3800.com/api.php?name=槟榔
-
          返回参数 type=0
 
          垃圾分类，0 为可回收、1 为有害、2 为厨余(湿)、3 为其他(干)
 
-
+         
+         https://quark.sm.cn/api/quark_sug?q=烧烤签是什么垃圾
          */
+        
+        
+        let name = try req.query.get(String.self, at: "name")
+        guard  let encodingString = name.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)  else {
+            return try ResponseJSON<Empty>(status: .error,message: "参数'name'为空").encode(for: req)
+        }
 
+        let httpReq = HTTPRequest(
+                                method: .GET,
+                                url: "/api.php?name=\(encodingString)",
+                                headers: [
+                                    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3" ,
+                                    "accept-encoding":"gzip, deflate, br",
+                                    "accept-language":"zh-CN,zh;q=0.9,en;q=0.8",
+                                    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36"])
+
+        let client = HTTPClient.connect(scheme:.https,hostname: "laji.lr3800.com",port: 443, on: req)
+        let httpRes = client.flatMap(to: HTTPResponse.self) { client in
+            return client.send(httpReq)
+        }
+
+        return httpRes.flatMap{ (httpRes) -> EventLoopFuture<Response> in
+
+            print(httpRes)
+            return try Response(http: httpRes, using: req).encode(for: req)
+        }
+//
+
+//        print("httpRes-future:\(httpRes)")
+//        let data = httpRes.flatMap(to: GarbageResult.self) { httpResponse in
+//            print("httpres:\(httpResponse)")
+//            let response = Response(http: httpResponse, using: req)
+//            print("response:\(response)")
+//
+//            return try response.content.decode(GarbageResult.self)
+//        }
+//
+//        data.map { (garbage)  in
+//            print(garbage)
+//        }
+//
+//        return try data.encode(for: req)
+
+    }
+}
+
+
+extension GarbageController{
+    
+    private func translate(_ req:Request) throws -> Future<Response>{
+        
         let name = try req.query.get(String.self, at: "name")
         
-        var httpReq = HTTPRequest(method: .GET, url: "/api.php?name=\(name)")
-        httpReq.headers  = ["Content-Type":"application/json;charset=UTF-8;text/html",
-                            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36",
-                            "Cookie": "__cfduid=d8965f82364956ea3ab8feea035d0f9761565254256"]
+        let body = ["from":"zh","to":"zw","src_text":name]
+        let param = try JSONEncoder().encode(body)
+        let httpReq = HTTPRequest(method: .POST, url: "/translate/trans", headers: ["Accept": "application/json, text/javascript, */*; q=0.01",
+                                                                                    "Content-Type": "application/json;charset=UTF-8",
+                                                                                    "Referer": "http://www.mzywfy.org.cn/mainIndex.jsp",
+                                                                                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36"]
+            , body: HTTPBody(data: param) )
         
-        let client = HTTPClient.connect(scheme:.https,hostname: "laji.lr3800.com", on: req)
+        let client = HTTPClient.connect(scheme:.http,hostname: "218.241.146.94",port: 8989, on: req)
         let httpRes = client.flatMap(to: HTTPResponse.self) { client in
             return client.send(httpReq)
         }
         
         return httpRes.flatMap{ (httpRes) -> EventLoopFuture<Response> in
+
+            print(httpRes)
             return try Response(http: httpRes, using: req).encode(for: req)
         }
-//        let data = httpRes.flatMap(to: [String:Any].self) { httpResponse in
-//            let response = Response(http: httpResponse, using: req)
-//            return response
-////            return try response.content.decode([String:Any].self)
-//        }
+
     }
 }
