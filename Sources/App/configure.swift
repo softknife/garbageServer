@@ -4,8 +4,10 @@ import Vapor
 /// Called before your application initializes.
 public func configure(_ config: inout Config, _ env: inout Environment, _ services: inout Services) throws {
     
+    #if DEBUG
     let serverConfigure = NIOServerConfig.default(hostname:"0.0.0.0",port:8080)
     services.register(serverConfigure)
+    #endif
     
     // Register providers first
     try services.register(FluentSQLiteProvider())
